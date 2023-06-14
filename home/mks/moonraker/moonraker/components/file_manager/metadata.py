@@ -954,11 +954,11 @@ class KiriMoto(BaseSlicer):
             r"; firstLayerBedTemp = (\d+\.?\d*)", self.header_data
         )
 
-class Sovol3DCura(BaseSlicer):
+class Comgrow3DCura(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
-        log_to_stderr("/******************Sovol3DCura*****************/")
+        log_to_stderr("/******************Comgrow3DCura*****************/")
         aliases = {
-            'Sovol3D':r"Sovol Slicer\s(.*)\s",
+            'Comgrow3D': r"Comgrow3D Slicer\s(.*)\s",
         }
 
         log_to_stderr(f"footer_data: {len(self.footer_data)}")
@@ -1042,10 +1042,10 @@ class Sovol3DCura(BaseSlicer):
         if not time_match:
             log_to_stderr('None\n')
             return None
-        
+
         time_group = int(time_match.strip(";TIME:"))
         log_to_stderr(f"time_group: {time_group}")
-        
+
         return round(time_group, 2)
 
     def parse_first_layer_extr_temp(self) -> Optional[float]:
@@ -1087,7 +1087,7 @@ class Sovol3DCura(BaseSlicer):
             log_to_stderr('None\n')
             return None
         return val.group()
-    
+
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
         preview_list = []
         preview_data = ""
@@ -1095,23 +1095,23 @@ class Sovol3DCura(BaseSlicer):
         info = []
         sovol_thumbs = [i for i in self.header_data.split("\n")]
         for item in sovol_thumbs:
-            if item.startswith("; Sovol3D thumbnail end"):
+            if item.startswith("; Comgrow3D thumbnail end"):
                 break
 
             if flag:
                 preview_list.append(item.strip("; ").strip("\r"))
 
-            if item.startswith("; Sovol3D thumbnail begin"):
+            if item.startswith("; Comgrow3D thumbnail begin"):
                 infos = self._regex_find_first(r"\d*x\d* \d*", item)
                 log_to_stderr(f"infos: {infos}")
                 flag = True
-        
+
         preview_data = "".join(preview_list)
 
         if not preview_data:
-            log_to_stderr(f"sovol preview_data is not")
+            log_to_stderr(f"Comgrow preview_data is not")
             return None
-        
+
         # log_to_stderr(f"sovol preview_data: {preview_data}")
 
         thumb_dir = os.path.join(os.path.dirname(self.path), ".thumbs")
@@ -1121,14 +1121,14 @@ class Sovol3DCura(BaseSlicer):
             except Exception:
                 log_to_stderr(f"Unable to create thumb dir: {thumb_dir}")
                 return None
-        
+
         thumb_base = os.path.splitext(os.path.basename(self.path))[0]
         parsed_matches: List[Dict[str, Any]] = []
         has_miniature: bool = False
         if infos:
             for i in infos.replace("x", " ").split(" "):
                 info.append(int(i))
-            
+
         log_to_stderr(f"info: {info}")
 
         if len(info) != 3:
@@ -1138,7 +1138,7 @@ class Sovol3DCura(BaseSlicer):
             log_to_stderr(
                 f"MetadataError: Thumbnail Size Mismatch: "
                 f"detected {info[2]}, actual {len(preview_data)}")
-            
+
         thumb_name = f"{thumb_base}-{info[0]}x{info[1]}.png"
         thumb_path = os.path.join(thumb_dir, thumb_name)
         rel_thumb_path = os.path.join(".thumbs", thumb_name)
@@ -1177,10 +1177,11 @@ class Sovol3DCura(BaseSlicer):
                 log_to_stderr(str(e))
         return parsed_matches
 
+
 READ_SIZE = 512 * 1024
 SUPPORTED_SLICERS: List[Type[BaseSlicer]] = [
     PrusaSlicer, Slic3rPE, Slic3r, Cura, Simplify3D,
-    KISSlicer, IdeaMaker, IceSL, KiriMoto, Sovol3DCura
+    KISSlicer, IdeaMaker, IceSL, KiriMoto, Comgrow3DCura
 ]
 SUPPORTED_DATA = [
     'gcode_start_byte',
@@ -1244,50 +1245,6 @@ def process_objects(file_path: str, slicer: BaseSlicer, name: str) -> bool:
             file_path = os.path.realpath(file_path)
         shutil.move(tmp_file, file_path)
     return True
-
-def add_head_fan_offon_gcode(file_path: str, slicer: str):
-    insert_list = ["\r\nSET_FAN_SPEED FAN=extruder_partfan SPEED=1;Klipper extruder part fan on\r\n", "\r\nSET_FAN_SPEED FAN=extruder_partfan SPEED=0;Klipper extruder part fan off\r\n"]
-
-    if gcode_data.find("SET_FAN_SPEED") > 0:
-        return
-    if slicer in ["Sovol3D", "Cura"]:
-        find_list = [";LAYER:1", "Turn-off fan"]
-    elif slicer in ["PrusaSlicer", "SuperSlicer", "SliCR-3D", "BambuStudio", "A3dp-Slicer"]:
-        find_list = [";LAYER_CHANGE", "; Filament-specific end gcode"]
-    elif slicer == "Slic3r PE":
-        find_list = [";LAYER:1", "Turn-off fan"]
-    elif slicer == "Slic3r":
-        find_list = [";LAYER:1", "Turn-off fan"]
-    # elif slicer == "Simplify3D":
-    #     find_list = [";LAYER:1", "Turn-off fan"]
-    # elif slicer == "KISSlicer":
-    #     find_list = [";LAYER:1", "Turn-off fan"]
-    # elif slicer == "IdeaMaker":
-    #     find_list = [";LAYER:1", "Turn-off fan"]
-    # elif slicer == "IceSL":
-    #     find_list = [";LAYER:1", "Turn-off fan"]
-    # elif slicer == "Kiri:Moto":
-    #     find_list = [";LAYER:1", "Turn-off fan"]
-    # elif slicer == "Unknown":
-    #     find_list = [";LAYER:1", "Turn-off fan"]
-
-    gcode_data = ""
-    with open(file_path, 'r') as f:
-        gcode_data = f.read()
-        log_to_stderr(f"add_head_fan_offon_gcode_start: {len(gcode_data)}")
-
-        for i in range(2):
-            find_text = find_list[i]
-            insert_text = insert_list[i]
-            index = gcode_data.find(find_text)
-            log_to_stderr(f"index{i}: {index}")
-            gcode_data = gcode_data[0:index+len(find_text)] + insert_text + gcode_data[index+len(find_text):]
-
-    with open(file_path, 'w') as f:
-        if len(gcode_data) > 0:
-            f.write(gcode_data)
-    
-    log_to_stderr(f"add_head_fan_offon_gcode_end: {len(gcode_data)}")
 
 def get_slicer(file_path: str) -> Tuple[BaseSlicer, Dict[str, str]]:
     header_data = footer_data = ""
@@ -1395,14 +1352,6 @@ def main(path: str,
     except Exception:
         log_to_stderr(traceback.format_exc())
         sys.exit(-1)
-
-    # log_to_stderr(f"main slicer:{metadata['slicer']}")
-
-    # try:
-    #     add_head_fan_offon_gcode(file_path, metadata['slicer'])
-    # except:
-    #     log_to_stderr("not add head fan gcode")
-    #     pass
 
     fd = sys.stdout.fileno()
     data = json.dumps(
